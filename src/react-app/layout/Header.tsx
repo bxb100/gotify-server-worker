@@ -139,7 +139,7 @@ const Header = ({
                     </IconButton>
 
                     <a
-                        href="https://github.com/gotify/server"
+                        href="https://github.com/bxb100/gotify-server-worker"
                         className={classes.link}
                         target="_blank"
                         rel="noopener noreferrer">
