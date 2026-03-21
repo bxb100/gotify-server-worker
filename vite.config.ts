@@ -1,0 +1,15 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { cloudflare } from "@cloudflare/vite-plugin";
+
+
+export default defineConfig({
+  plugins: [react({
+    babel: {
+      plugins: [
+        // I don't know why gotify ui don't need this
+        ["@babel/plugin-proposal-decorators", {version: "2023-11"}]
+      ]
+    }
+  }), cloudflare()],
+});
