@@ -85,7 +85,6 @@ interface IProps {
 }
 
 const Header = ({
-    version,
     name,
     loggedIn,
     admin,
@@ -111,13 +110,6 @@ const Header = ({
                             Gotify
                         </Typography>
                     </Link>
-                    <a
-                        href={'https://github.com/gotify/server/releases/tag/v' + version}
-                        className={classes.link}>
-                        <Typography variant="button" color="inherit">
-                            @{version}
-                        </Typography>
-                    </a>
                 </div>
                 {loggedIn && (
                     <Buttons
