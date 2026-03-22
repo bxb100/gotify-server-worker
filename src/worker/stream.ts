@@ -5,25 +5,23 @@ import type { EnvBindings } from "./types";
 export class StreamHub extends DurableObject<EnvBindings> {
   private readonly sockets = new Set<WebSocket>();
 
+  constructor(state: DurableObjectState, env: EnvBindings) {
+    super(state, env);
+    state.getWebSockets().forEach(socket => this.sockets.add(socket));
+  }
+
+  cleanup (server: WebSocket) {
+    this.sockets.delete(server);
+  };
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       const pair = new WebSocketPair();
-      const client = pair[0];
-      const server = pair[1];
-      server.accept();
-      this.sockets.add(server);
+      const [client, server] = Object.values(pair);
 
-      const cleanup = () => {
-        this.sockets.delete(server);
-      };
-
-      server.addEventListener("close", cleanup);
-      server.addEventListener("error", cleanup);
-      server.addEventListener("message", () => {
-        // Ignore inbound traffic. This websocket is server-push only.
-      });
+      this.ctx.acceptWebSocket(server);
 
       return new Response(null, {
         status: 101,
@@ -50,4 +48,13 @@ export class StreamHub extends DurableObject<EnvBindings> {
 
     return new Response("Not Found", { status: 404 });
   }
+
+  async webSocketClose(ws: WebSocket) {
+    this.cleanup(ws)
+  }
+
+  async webSocketError(ws: WebSocket) {
+    this.cleanup(ws)
+  }
+
 }
