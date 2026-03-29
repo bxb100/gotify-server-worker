@@ -1,50 +1,58 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "gotify-worker",
-	"main": "./src/worker/index.ts",
-	"compatibility_date": "2025-11-25",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"observability": {
-		"enabled": true
-	},
-	"upload_source_maps": true,
-	"assets": {
-		"directory": "./dist/client",
-		"not_found_handling": "single-page-application"
-	},
-	"placement": {  "mode": "smart" },
-	"d1_databases": [
-		{
-			"binding": "DB",
-			"database_name": "gotify",
-			"database_id": "271045a4-f27a-471e-8c72-577774acb77f"
-		}
-	],
-	"r2_buckets": [
-		{
-			"binding": "APP_IMAGES",
-			"bucket_name": "gotify-worker"
-		}
-	],
-	"durable_objects": {
-		"bindings": [{
-			"name": "STREAM_HUB",
-			"class_name": "StreamHub"
-		}]
-	},
-	"migrations": [{
-		"tag": "v1",
-		"new_sqlite_classes": ["StreamHub"]
-	}],
-	"vars": {
-		"GOTIFY_REGISTRATION": "true",
-		"GOTIFY_DEFAULT_USER": "admin",
-		"GOTIFY_DEFAULT_PASS": "admin",
-		"GOTIFY_PASSWORD_ROUNDS": "10",
-		"GOTIFY_VERSION": "worker-dev",
-		"GOTIFY_COMMIT": "unknown",
-		"GOTIFY_BUILD_DATE": "2026-03-22T00:00:00Z"
-	}
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "gotify-worker",
+    "main": "./src/worker/index.ts",
+    "compatibility_date": "2025-11-25",
+    "compatibility_flags": ["nodejs_compat"],
+    "observability": {
+        "enabled": true,
+    },
+    "upload_source_maps": true,
+    "assets": {
+        "directory": "./dist/client",
+        "not_found_handling": "single-page-application",
+    },
+    "triggers": {
+        "crons": ["0 * * * *"],
+    },
+    "placement": {
+        "mode": "targeted",
+        "region": "gcp:asia-east2",
+    },
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "gotify",
+            "database_id": "271045a4-f27a-471e-8c72-577774acb77f",
+        },
+    ],
+    "r2_buckets": [
+        {
+            "binding": "APP_IMAGES",
+            "bucket_name": "gotify-worker",
+        },
+    ],
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "STREAM_HUB",
+                "class_name": "StreamHub",
+            },
+        ],
+    },
+    "migrations": [
+        {
+            "tag": "v1",
+            "new_sqlite_classes": ["StreamHub"],
+        },
+    ],
+    "vars": {
+        "GOTIFY_REGISTRATION": "true",
+        "GOTIFY_DEFAULT_USER": "admin",
+        "GOTIFY_DEFAULT_PASS": "admin",
+        "GOTIFY_PASSWORD_ROUNDS": "10",
+        "GOTIFY_VERSION": "worker-dev",
+        "GOTIFY_COMMIT": "unknown",
+        "GOTIFY_BUILD_DATE": "2026-03-22T00:00:00Z",
+    },
 }

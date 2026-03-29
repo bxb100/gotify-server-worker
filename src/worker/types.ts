@@ -50,6 +50,21 @@ export interface MessageRow {
   date: string;
 }
 
+export type PluginCapability = "webhooker" | "displayer" | "configurer" | "messenger" | "storager";
+
+export interface PluginStateRow {
+  token: string;
+  enabled: number;
+  last_cleanup_at: string | null;
+  last_deleted_count: number;
+  last_error: string | null;
+}
+
+export interface PluginConfigRow {
+  token: string;
+  config: string;
+}
+
 export interface UserExternal {
   id: number;
   name: string;
@@ -83,6 +98,18 @@ export interface MessageExternal {
   priority: number;
   extras?: Record<string, unknown>;
   date: string;
+}
+
+export interface PluginExternal {
+  id: number;
+  token: string;
+  name: string;
+  modulePath: string;
+  enabled: boolean;
+  author?: string;
+  website?: string;
+  license?: string;
+  capabilities: PluginCapability[];
 }
 
 export interface PagedMessages {

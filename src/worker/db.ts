@@ -1,20 +1,39 @@
 import bcrypt from "bcryptjs";
-import type { ApplicationRow, ClientRow, EnvBindings, MessageRow, UserRow } from "./types";
+import type {
+  ApplicationRow,
+  ClientRow,
+  EnvBindings,
+  MessageRow,
+  PluginConfigRow,
+  PluginStateRow,
+  UserRow,
+} from "./types";
 import { generateSortKey, generateToken, passwordRounds } from "./utils";
 
 let bootstrapPromise: Promise<void> | null = null;
 
 async function all<T>(db: D1Database, sql: string, ...bindings: unknown[]): Promise<T[]> {
-  const result = await db.prepare(sql).bind(...bindings).all<T>();
+  const result = await db
+    .prepare(sql)
+    .bind(...bindings)
+    .all<T>();
   return (result.results ?? []) as T[];
 }
 
 async function first<T>(db: D1Database, sql: string, ...bindings: unknown[]): Promise<T | null> {
-  return (await db.prepare(sql).bind(...bindings).first<T>()) ?? null;
+  return (
+    (await db
+      .prepare(sql)
+      .bind(...bindings)
+      .first<T>()) ?? null
+  );
 }
 
 async function run(db: D1Database, sql: string, ...bindings: unknown[]): Promise<D1Result> {
-  return db.prepare(sql).bind(...bindings).run();
+  return db
+    .prepare(sql)
+    .bind(...bindings)
+    .run();
 }
 
 export function ensureBootstrap(env: EnvBindings): Promise<void> {
@@ -107,7 +126,19 @@ export function getClientByToken(db: D1Database, token: string): Promise<ClientR
 }
 
 export function getClientsByUser(db: D1Database, userId: number): Promise<ClientRow[]> {
-  return all<ClientRow>(db, "SELECT id, token, user_id, name, last_used FROM clients WHERE user_id = ? ORDER BY id ASC", userId);
+  return all<ClientRow>(
+    db,
+    "SELECT id, token, user_id, name, last_used FROM clients WHERE user_id = ? ORDER BY id ASC",
+    userId,
+  );
+}
+
+export function getClientsLastUsedBefore(db: D1Database, cutoffIso: string): Promise<ClientRow[]> {
+  return all<ClientRow>(
+    db,
+    "SELECT id, token, user_id, name, last_used FROM clients WHERE last_used IS NOT NULL AND last_used <= ? ORDER BY id ASC",
+    cutoffIso,
+  );
 }
 
 export async function createClient(db: D1Database, input: { name: string; userId: number }): Promise<ClientRow> {
@@ -129,10 +160,7 @@ export async function createClient(db: D1Database, input: { name: string; userId
   return (await getClientById(db, Number(result.meta.last_row_id))) as ClientRow;
 }
 
-export async function updateClient(
-  db: D1Database,
-  input: { id: number; name: string },
-): Promise<ClientRow> {
+export async function updateClient(db: D1Database, input: { id: number; name: string }): Promise<ClientRow> {
   await run(db, "UPDATE clients SET name = ? WHERE id = ?", input.name, input.id);
   return (await getClientById(db, input.id)) as ClientRow;
 }
@@ -274,12 +302,7 @@ export function getMessagesByApplication(
   );
 }
 
-export function getMessagesByUser(
-  db: D1Database,
-  userId: number,
-  limit: number,
-  since: number,
-): Promise<MessageRow[]> {
+export function getMessagesByUser(db: D1Database, userId: number, limit: number, since: number): Promise<MessageRow[]> {
   if (since > 0) {
     return all<MessageRow>(
       db,
@@ -340,5 +363,49 @@ export function deleteMessagesByApplication(db: D1Database, applicationId: numbe
 }
 
 export function deleteMessagesByUser(db: D1Database, userId: number): Promise<D1Result> {
-  return run(db, "DELETE FROM messages WHERE application_id IN (SELECT id FROM applications WHERE user_id = ?)", userId);
+  return run(
+    db,
+    "DELETE FROM messages WHERE application_id IN (SELECT id FROM applications WHERE user_id = ?)",
+    userId,
+  );
+}
+
+export function getPluginStateByToken(db: D1Database, token: string): Promise<PluginStateRow | null> {
+  return first<PluginStateRow>(
+    db,
+    "SELECT token, enabled, last_cleanup_at, last_deleted_count, last_error FROM plugin_states WHERE token = ?",
+    token,
+  );
+}
+
+export function getPluginConfigByToken(db: D1Database, token: string): Promise<PluginConfigRow | null> {
+  return first<PluginConfigRow>(db, "SELECT token, config FROM plugin_configs WHERE token = ?", token);
+}
+
+export function setPluginEnabled(db: D1Database, token: string, enabled: boolean): Promise<D1Result> {
+  return run(db, "UPDATE plugin_states SET enabled = ? WHERE token = ?", enabled ? 1 : 0, token);
+}
+
+export function setPluginConfig(db: D1Database, token: string, config: string): Promise<D1Result> {
+  return run(db, "UPDATE plugin_configs SET config = ? WHERE token = ?", config, token);
+}
+
+export function updatePluginCleanupState(
+  db: D1Database,
+  token: string,
+  input: { ranAt: string; deletedCount: number; error: string | null },
+): Promise<void> {
+  return run(
+    db,
+    "UPDATE plugin_states SET last_cleanup_at = ?, last_deleted_count = ?, last_error = ? WHERE token = ?",
+    input.ranAt,
+    input.deletedCount,
+    input.error,
+    token,
+  ).then(() => undefined);
+}
+
+export async function deleteMessagesOlderThan(db: D1Database, cutoffIso: string): Promise<number> {
+  const result = await run(db, "DELETE FROM messages WHERE date <= ?", cutoffIso);
+  return Number(result.meta.changes ?? 0);
 }

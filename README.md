@@ -8,7 +8,7 @@
 
 ## Introduction
 
-> [!WARNING]         
+> [!WARNING]  
 > Vibe coding with Codex, Gemini, and Copilot. This repository has not been fully reviewed.
 
 The source code and UI are derived from https://github.com/gotify/server. All credit goes to them.
@@ -16,7 +16,7 @@ The source code and UI are derived from https://github.com/gotify/server. All cr
 ## Drawback
 
 - API change may not affect immediately
-- Plugin not support
+- Only built-in retention plugin support is implemented
 
 ## How to use
 

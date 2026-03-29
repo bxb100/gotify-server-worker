@@ -30,6 +30,15 @@ import {
   updateUser,
 } from "./db";
 import { optionalAuth, requireAdmin, requireApplication, requireClient } from "./auth";
+import {
+  ensurePluginBootstrap,
+  getPluginConfig,
+  getPluginDisplay,
+  listPlugins,
+  runScheduledPlugins,
+  setPluginConfigById,
+  setPluginEnabledById,
+} from "./plugins";
 import { StreamHub } from "./stream";
 import type { AuthState, EnvBindings, PagedMessages } from "./types";
 import {
@@ -66,7 +75,7 @@ type AppEnv = {
 const app = new Hono<AppEnv>();
 
 app.use("*", async (c, next) => {
-  await ensureBootstrap(c.env);
+  await Promise.all([ensureBootstrap(c.env), ensurePluginBootstrap(c.env.DB)]);
   c.set("auth", null);
   await next();
 
@@ -80,7 +89,11 @@ app.use("*", async (c, next) => {
   }
 });
 
-app.options("*", (c) => new Response(null, { status: 204, headers: corsHeaders(c.req.header("Origin") ?? null, c.env.CORS_ALLOW_ORIGIN) }));
+app.options(
+  "*",
+  (c) =>
+    new Response(null, { status: 204, headers: corsHeaders(c.req.header("Origin") ?? null, c.env.CORS_ALLOW_ORIGIN) }),
+);
 
 app.onError((error) => {
   if (error instanceof ApiError) {
@@ -196,9 +209,10 @@ app.post("/user/:id", requireAdmin, async (c) => {
       id,
       name: requireNonEmptyString(body.name, "name"),
       admin: nextAdmin,
-      pass: typeof body.pass === "string" && body.pass !== ""
-        ? await bcrypt.hash(body.pass, passwordRounds(c.env.GOTIFY_PASSWORD_ROUNDS))
-        : existing.pass,
+      pass:
+        typeof body.pass === "string" && body.pass !== ""
+          ? await bcrypt.hash(body.pass, passwordRounds(c.env.GOTIFY_PASSWORD_ROUNDS))
+          : existing.pass,
     });
 
     return c.json(toUserExternal(updated));
@@ -222,11 +236,7 @@ app.delete("/user/:id", requireAdmin, async (c) => {
   }
   if (c.env.APP_IMAGES) {
     const apps = await getApplicationsByUser(c.env.DB, id);
-    await Promise.all(
-      apps
-        .filter((appRow) => appRow.image)
-        .map((appRow) => c.env.APP_IMAGES!.delete(appRow.image)),
-    );
+    await Promise.all(apps.filter((appRow) => appRow.image).map((appRow) => c.env.APP_IMAGES!.delete(appRow.image)));
   }
   await deleteUser(c.env.DB, id);
   return new Response(null, { status: 200 });
@@ -361,7 +371,7 @@ app.delete("/application/:id", requireClient, async (c) => {
   if (!appRow || appRow.user_id !== auth.userId) {
     throw new ApiError(404, `app with id ${id} doesn't exists`);
   }
-  if (Boolean(appRow.internal)) {
+  if (appRow.internal) {
     throw new ApiError(400, "cannot delete internal application");
   }
   if (appRow.image && c.env.APP_IMAGES) {
@@ -389,9 +399,7 @@ app.post("/application/:id/image", requireClient, async (c) => {
     throw new ApiError(400, "file with key 'file' must be present");
   }
 
-  const extension = uploaded.name.includes(".")
-    ? `.${uploaded.name.split(".").pop() ?? ""}`
-    : "";
+  const extension = uploaded.name.includes(".") ? `.${uploaded.name.split(".").pop() ?? ""}` : "";
 
   if (!validImageExtension(extension)) {
     throw new ApiError(400, "invalid file extension");
@@ -511,13 +519,13 @@ app.post("/message", requireApplication, async (c) => {
   }
 
   const title = maybeString(body.title).trim() || application.name;
-  const priority = body.priority === undefined
-    ? application.default_priority
-    : maybeNumber(body.priority, application.default_priority);
+  const priority =
+    body.priority === undefined
+      ? application.default_priority
+      : maybeNumber(body.priority, application.default_priority);
 
-  const extras = body.extras && typeof body.extras === "object" && !Array.isArray(body.extras)
-    ? JSON.stringify(body.extras)
-    : null;
+  const extras =
+    body.extras && typeof body.extras === "object" && !Array.isArray(body.extras) ? JSON.stringify(body.extras) : null;
 
   const created = await createMessage(c.env.DB, {
     applicationId: application.id,
@@ -544,26 +552,38 @@ app.get("/stream", requireClient, async (c) => {
   return stub.fetch(c.req.raw);
 });
 
-app.get("/plugin", requireClient, (c) => c.json([]));
+app.get("/plugin", requireClient, async (c) => c.json(await listPlugins(c.env.DB)));
 
-app.get("/plugin/:id/config", requireClient, () => {
-  throw new ApiError(501, "plugins are not supported on the worker runtime");
+app.get("/plugin/:id/config", requireClient, async (c) => {
+  const id = parseId(c.req.param("id"));
+  return new Response(await getPluginConfig(c.env.DB, id), {
+    headers: { "content-type": "application/x-yaml; charset=utf-8" },
+  });
 });
 
-app.post("/plugin/:id/config", requireClient, () => {
-  throw new ApiError(501, "plugins are not supported on the worker runtime");
+app.post("/plugin/:id/config", requireClient, async (c) => {
+  const id = parseId(c.req.param("id"));
+  await setPluginConfigById(c.env, id, await c.req.raw.text());
+  return new Response(null, { status: 204 });
 });
 
-app.get("/plugin/:id/display", requireClient, () => {
-  throw new ApiError(501, "plugins are not supported on the worker runtime");
+app.get("/plugin/:id/display", requireClient, async (c) => {
+  const id = parseId(c.req.param("id"));
+  return new Response(await getPluginDisplay(c.env.DB, id), {
+    headers: { "content-type": "text/markdown; charset=utf-8" },
+  });
 });
 
-app.post("/plugin/:id/enable", requireClient, () => {
-  throw new ApiError(501, "plugins are not supported on the worker runtime");
+app.post("/plugin/:id/enable", requireClient, async (c) => {
+  const id = parseId(c.req.param("id"));
+  await setPluginEnabledById(c.env, id, true);
+  return new Response(null, { status: 204 });
 });
 
-app.post("/plugin/:id/disable", requireClient, () => {
-  throw new ApiError(501, "plugins are not supported on the worker runtime");
+app.post("/plugin/:id/disable", requireClient, async (c) => {
+  const id = parseId(c.req.param("id"));
+  await setPluginEnabledById(c.env, id, false);
+  return new Response(null, { status: 204 });
 });
 
 app.notFound(() => jsonError(404, "Not Found"));
@@ -575,7 +595,11 @@ function requireAuth(auth: AuthState | null): AuthState {
   return auth;
 }
 
-function buildPagedMessages(rows: Awaited<ReturnType<typeof getMessagesByUser>>, limit: number, requestUrl: string): PagedMessages {
+function buildPagedMessages(
+  rows: Awaited<ReturnType<typeof getMessagesByUser>>,
+  limit: number,
+  requestUrl: string,
+): PagedMessages {
   const hasNext = rows.length > limit;
   const visible = hasNext ? rows.slice(0, rows.length - 1) : rows;
   const last = visible.at(-1);
@@ -601,4 +625,14 @@ async function publishToUserStream(env: EnvBindings, userId: number, payload: un
 }
 
 export { StreamHub };
-export default app;
+
+export default {
+  fetch: app.fetch,
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(
+      Promise.all([ensureBootstrap(env), ensurePluginBootstrap(env.DB)]).then(() =>
+        runScheduledPlugins(env, controller),
+      ),
+    );
+  },
+} satisfies ExportedHandler<EnvBindings>;
