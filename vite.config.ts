@@ -43,15 +43,7 @@ const clientManualChunks = (id: string) => {
     return "framework";
   }
 
-  if (
-    matchesPackagePrefix(pkg, [
-      "@mui",
-      "@emotion",
-      "tss-react",
-      "notistack",
-      "react-transition-group",
-    ])
-  ) {
+  if (matchesPackagePrefix(pkg, ["@mui", "@emotion", "tss-react", "notistack", "react-transition-group"])) {
     return "mui";
   }
 
@@ -81,29 +73,23 @@ const clientManualChunks = (id: string) => {
     return "markdown";
   }
 
-  if (
-    matchesPackagePrefix(pkg, [
-      "@uiw",
-      "@codemirror",
-      "@lezer",
-      "codemirror",
-      "style-mod",
-      "w3c-keyname",
-    ])
-  ) {
+  if (matchesPackagePrefix(pkg, ["@uiw", "@codemirror", "@lezer", "codemirror", "style-mod", "w3c-keyname"])) {
     return "plugin-editor";
   }
 };
 
 export default defineConfig({
-  plugins: [react({
-    babel: {
-      plugins: [
-        // I don't know why gotify ui don't need this
-        ["@babel/plugin-proposal-decorators", {version: "2023-11"}]
-      ]
-    }
-  }), cloudflare()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [
+          // I don't know why gotify ui don't need this
+          ["@babel/plugin-proposal-decorators", { version: "2023-11" }],
+        ],
+      },
+    }),
+    cloudflare(),
+  ],
   environments: {
     client: {
       build: {

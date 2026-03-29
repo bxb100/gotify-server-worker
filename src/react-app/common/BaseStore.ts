@@ -1,59 +1,58 @@
-import {action, observable} from 'mobx';
+import { action, observable } from "mobx";
 
 interface HasID {
-    id: number;
+  id: number;
 }
 
 export interface IClearable {
-    clear(): void;
+  clear(): void;
 }
 
 /**
  * Base implementation for handling items with ids.
  */
 export abstract class BaseStore<T extends HasID> implements IClearable {
-    @observable protected accessor items: T[] = [];
+  @observable protected accessor items: T[] = [];
 
-    protected abstract requestItems(): Promise<T[]>;
+  protected abstract requestItems(): Promise<T[]>;
 
-    protected abstract requestDelete(id: number): Promise<void>;
+  protected abstract requestDelete(id: number): Promise<void>;
 
-    @action
-    public remove = async (id: number): Promise<void> => {
-        await this.requestDelete(id);
-        await this.refresh();
-    };
+  @action
+  public remove = async (id: number): Promise<void> => {
+    await this.requestDelete(id);
+    await this.refresh();
+  };
 
-    @action
-    public refresh = (): Promise<void> =>
-        this.requestItems().then(
-            action((items) => {
-                this.items = items || [];
-            })
-        );
+  @action
+  public refresh = (): Promise<void> =>
+    this.requestItems().then(
+      action((items) => {
+        this.items = items || [];
+      }),
+    );
 
-    @action
-    public refreshIfMissing = async (id: number): Promise<void> => {
-        if (this.getByIDOrUndefined(id) === undefined) {
-            await this.refresh();
-        }
-    };
+  @action
+  public refreshIfMissing = async (id: number): Promise<void> => {
+    if (this.getByIDOrUndefined(id) === undefined) {
+      await this.refresh();
+    }
+  };
 
-    public getByID = (id: number): T => {
-        const item = this.getByIDOrUndefined(id);
-        if (item === undefined) {
-            throw new Error('cannot find item with id ' + id);
-        }
-        return item;
-    };
+  public getByID = (id: number): T => {
+    const item = this.getByIDOrUndefined(id);
+    if (item === undefined) {
+      throw new Error("cannot find item with id " + id);
+    }
+    return item;
+  };
 
-    public getByIDOrUndefined = (id: number): T | undefined =>
-        this.items.find((hasId: HasID) => hasId.id === id);
+  public getByIDOrUndefined = (id: number): T | undefined => this.items.find((hasId: HasID) => hasId.id === id);
 
-    public getItems = (): T[] => this.items;
+  public getItems = (): T[] => this.items;
 
-    @action
-    public clear = (): void => {
-        this.items = [];
-    };
+  @action
+  public clear = (): void => {
+    this.items = [];
+  };
 }

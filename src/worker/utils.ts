@@ -1,4 +1,13 @@
-import type { ApplicationExternal, ApplicationRow, ClientExternal, ClientRow, MessageExternal, MessageRow, UserExternal, UserRow } from "./types";
+import type {
+  ApplicationExternal,
+  ApplicationRow,
+  ClientExternal,
+  ClientRow,
+  MessageExternal,
+  MessageRow,
+  UserExternal,
+  UserRow,
+} from "./types";
 
 const tokenCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_";
 const randomTokenLength = 14;
@@ -224,7 +233,8 @@ export function contentTypeFromExtension(extension: string): string {
 
 export function isSupportedImage(buffer: ArrayBuffer): boolean {
   const bytes = new Uint8Array(buffer);
-  if (bytes.length >= 8 &&
+  if (
+    bytes.length >= 8 &&
     bytes[0] === 0x89 &&
     bytes[1] === 0x50 &&
     bytes[2] === 0x4e &&
@@ -232,13 +242,11 @@ export function isSupportedImage(buffer: ArrayBuffer): boolean {
     bytes[4] === 0x0d &&
     bytes[5] === 0x0a &&
     bytes[6] === 0x1a &&
-    bytes[7] === 0x0a) {
+    bytes[7] === 0x0a
+  ) {
     return true;
   }
-  if (bytes.length >= 3 &&
-    bytes[0] === 0xff &&
-    bytes[1] === 0xd8 &&
-    bytes[2] === 0xff) {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return true;
   }
   if (bytes.length >= 6) {

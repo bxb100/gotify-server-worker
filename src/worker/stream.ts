@@ -7,12 +7,12 @@ export class StreamHub extends DurableObject<EnvBindings> {
 
   constructor(state: DurableObjectState, env: EnvBindings) {
     super(state, env);
-    state.getWebSockets().forEach(socket => this.sockets.add(socket));
+    state.getWebSockets().forEach((socket) => this.sockets.add(socket));
   }
 
-  cleanup (server: WebSocket) {
+  cleanup(server: WebSocket) {
     this.sockets.delete(server);
-  };
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -50,11 +50,10 @@ export class StreamHub extends DurableObject<EnvBindings> {
   }
 
   async webSocketClose(ws: WebSocket) {
-    this.cleanup(ws)
+    this.cleanup(ws);
   }
 
   async webSocketError(ws: WebSocket) {
-    this.cleanup(ws)
+    this.cleanup(ws);
   }
-
 }

@@ -1,11 +1,11 @@
-import {enqueueSnackbar} from 'notistack';
+import { enqueueSnackbar } from "notistack";
 
 export interface SnackReporter {
-    (message: string): void;
+  (message: string): void;
 }
 
 export class SnackManager {
-    public snack: SnackReporter = (message: string): void => {
-        enqueueSnackbar({message, variant: 'info'});
-    };
+  public snack: SnackReporter = (message: string): void => {
+    enqueueSnackbar({ message, variant: "info" });
+  };
 }
