@@ -22,17 +22,14 @@ The source code and UI are derived from https://github.com/gotify/server. All cr
 1. `npx wrangler d1 create gotify`, remember replace with your own `database_id` in `wrangler.jsonc`
 2. `npx wrangler d1 migrations apply gotify --remote`
 3. `npx wrangler r2 bucket create gotify-worker`
-4. Configure plugins in `src/worker/plugins.ts`
-5. `npm run cf-typegen`
-6. `npm run build && npm run deploy`
+4. `npm run cf-typegen` (optional)
+5. `npm run build && npm run deploy`
 
 ## Plugins
 
 - Plugin logic now lives under `plugins/`
 - Each plugin is a standalone workspace package that extends `GotifyPlugin`
-- The worker instantiates plugins directly through `src/worker/plugin-registry.ts`
-- Add or remove plugins by editing `src/worker/plugin-registry.ts`
-- After changing plugin bindings or worker exports, rerun `npm run cf-typegen`
+- Add/Remove plugin dependency will auto trigger re-generation of `src/worker/gen/load.plugin.ts`
 
 ## Client
 

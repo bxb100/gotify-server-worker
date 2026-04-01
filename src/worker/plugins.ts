@@ -1,5 +1,3 @@
-import clientTokenCleanup from "@gotify/client-token-cleanup";
-import messageAutoDelete from "@gotify/message-auto-delete";
 import type { GotifyHostApi, GotifyPlugin, PluginDefinition, PluginManifest, PluginState } from "@gotify/sdk";
 import { load } from "js-yaml";
 
@@ -13,14 +11,13 @@ import {
 	setPluginEnabled,
 	updatePluginCleanupState,
 } from "./db";
+import { pluginDefinitions } from "./gen/load.plugin";
 import type { EnvBindings, PluginExternal, PluginStateRow } from "./types";
 import { ApiError } from "./utils";
 
 type PluginRuntimeContext = {
 	env: EnvBindings;
 };
-
-const pluginDefinitions = [messageAutoDelete, clientTokenCleanup];
 
 let pluginBootstrapPromise: Promise<void> | null = null;
 

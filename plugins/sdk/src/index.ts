@@ -46,7 +46,11 @@ export interface GotifyHostApi {
 }
 
 export abstract class GotifyPlugin {
-	public constructor(protected readonly host: GotifyHostApi) {}
+	protected readonly host: GotifyHostApi;
+
+	public constructor(host: GotifyHostApi) {
+		this.host = host;
+	}
 
 	public validateConfig?(config: unknown, configText: string): void | Promise<void>;
 	public getDisplay?(state: PluginState, config: unknown, configText: string): string | Promise<string>;
