@@ -1,56 +1,35 @@
+import type { GotifyHostApi, PluginManifest, PluginState } from "@gotify/sdk";
 import { load } from "js-yaml";
 
 import { getPluginConfigByToken, getPluginStateByToken, setPluginConfig, setPluginEnabled } from "./db";
-import type { EnvBindings, PluginCapability, PluginExternal, PluginStateRow } from "./types";
+import { configuredPlugins } from "./generated/plugin-registry";
+import type { EnvBindings, PluginExternal, PluginStateRow } from "./types";
 import { ApiError } from "./utils";
 
-type PluginManifest = {
-	id: number;
-	token: string;
-	name: string;
-	modulePath: string;
-	author: string;
-	website: string;
-	license: string;
-	capabilities: readonly PluginCapability[];
-	cronExpressions?: readonly string[];
+type PluginRuntimeContext = {
+	env: EnvBindings;
+	ctx: ExecutionContext;
 };
 
-type PluginModule = {
+type PluginWorker = {
+	validateConfig?(config: unknown, configText: string): void | Promise<void>;
+	getDisplay?(state: PluginState, config: unknown, configText: string): string | Promise<string>;
+	onEnable?(state: PluginState, config: unknown, configText: string): Promise<void>;
+	onDisable?(state: PluginState, config: unknown, configText: string): Promise<void>;
+	onConfigUpdated?(state: PluginState, config: unknown, configText: string): Promise<void>;
+	onScheduled?(state: PluginState, controller: ScheduledController, config: unknown, configText: string): Promise<void>;
+};
+
+type ConfiguredPluginDefinition = {
 	manifest: PluginManifest;
 	defaultConfig: string;
-	validateConfig?(config: unknown, configText: string): void | Promise<void>;
-	getDisplay?(state: PluginStateRow, config: unknown, configText: string): string | Promise<string>;
-	onEnable?(env: EnvBindings, state: PluginStateRow, config: unknown, configText: string): Promise<void>;
-	onDisable?(env: EnvBindings, state: PluginStateRow, config: unknown, configText: string): Promise<void>;
-	onConfigUpdated?(env: EnvBindings, state: PluginStateRow, config: unknown, configText: string): Promise<void>;
-	onScheduled?(
-		env: EnvBindings,
-		state: PluginStateRow,
-		controller: ScheduledController,
-		config: unknown,
-		configText: string,
-	): Promise<void>;
+	entrypointName: string;
+	workerCode: WorkerLoaderWorkerCode;
 };
 
-type PluginLoader = {
-	id: number;
-	load: () => Promise<PluginModule>;
-};
-
-const pluginLoaders: PluginLoader[] = [
-	{
-		id: 1,
-		load: () => import("./plugin-modules/message-auto-delete"),
-	},
-	{
-		id: 2,
-		load: () => import("./plugin-modules/client-token-cleanup"),
-	},
-];
+const pluginDefinitions = configuredPlugins as unknown as readonly ConfiguredPluginDefinition[];
 
 let pluginBootstrapPromise: Promise<void> | null = null;
-let pluginModuleCache: Promise<PluginModule[]> | null = null;
 
 export function ensurePluginBootstrap(db: D1Database): Promise<void> {
 	pluginBootstrapPromise ??= initializePluginBootstrap(db);
@@ -78,9 +57,8 @@ async function initializePluginBootstrap(db: D1Database): Promise<void> {
 		)
 		.run();
 
-	const modules = await loadAllPluginModules();
 	await Promise.all(
-		modules.map((plugin) =>
+		pluginDefinitions.map((plugin) =>
 			db
 				.prepare(
 					`INSERT INTO plugin_states (token, enabled, last_cleanup_at, last_deleted_count, last_error)
@@ -92,7 +70,7 @@ async function initializePluginBootstrap(db: D1Database): Promise<void> {
 		),
 	);
 	await Promise.all(
-		modules.map((plugin) =>
+		pluginDefinitions.map((plugin) =>
 			db
 				.prepare(
 					`INSERT INTO plugin_configs (token, config)
@@ -106,99 +84,146 @@ async function initializePluginBootstrap(db: D1Database): Promise<void> {
 }
 
 export async function listPlugins(db: D1Database): Promise<PluginExternal[]> {
-	const modules = await loadAllPluginModules();
 	return Promise.all(
-		modules.map(async (plugin) =>
+		pluginDefinitions.map(async (plugin) =>
 			toPluginExternal(plugin.manifest, await requirePluginState(db, plugin.manifest.token)),
 		),
 	);
 }
 
-export async function getPluginDisplay(db: D1Database, id: number): Promise<string> {
-	const plugin = await getPluginModuleById(id);
-	if (!plugin.getDisplay) {
+export async function getPluginDisplay(runtime: PluginRuntimeContext, id: number): Promise<string> {
+	const plugin = getPluginDefinitionById(id);
+	if (!plugin.manifest.capabilities.includes("displayer")) {
 		throw new ApiError(404, "plugin does not support display");
 	}
+
+	const worker = await getPluginWorker(plugin, runtime);
+	if (!worker.getDisplay) {
+		throw new ApiError(404, "plugin does not support display");
+	}
+
 	const [state, configText] = await Promise.all([
-		requirePluginState(db, plugin.manifest.token),
-		requirePluginConfig(db, plugin),
+		requirePluginState(runtime.env.DB, plugin.manifest.token),
+		requirePluginConfig(runtime.env.DB, plugin),
 	]);
-	return plugin.getDisplay(state, parseYamlConfig(configText), configText);
+	return worker.getDisplay(toPluginState(state), parseYamlConfig(configText), configText);
 }
 
 export async function getPluginConfig(db: D1Database, id: number): Promise<string> {
-	const plugin = await getPluginModuleById(id);
+	const plugin = getPluginDefinitionById(id);
 	if (!plugin.manifest.capabilities.includes("configurer")) {
 		throw new ApiError(404, "plugin does not support configuration");
 	}
 	return requirePluginConfig(db, plugin);
 }
 
-export async function setPluginConfigById(env: EnvBindings, id: number, configText: string): Promise<void> {
-	const plugin = await getPluginModuleById(id);
+export async function setPluginConfigById(
+	runtime: PluginRuntimeContext,
+	id: number,
+	configText: string,
+): Promise<void> {
+	const plugin = getPluginDefinitionById(id);
 	if (!plugin.manifest.capabilities.includes("configurer")) {
 		throw new ApiError(404, "plugin does not support configuration");
 	}
 
+	const worker = await getPluginWorker(plugin, runtime);
 	const normalizedConfig = normalizeConfigText(configText, plugin.defaultConfig);
 	const parsedConfig = parseYamlConfig(normalizedConfig);
-	await plugin.validateConfig?.(parsedConfig, normalizedConfig);
-	await setPluginConfig(env.DB, plugin.manifest.token, normalizedConfig);
+	try {
+		await worker.validateConfig?.(parsedConfig, normalizedConfig);
+	} catch (error) {
+		throw toApiError(error, 400);
+	}
 
-	const state = await requirePluginState(env.DB, plugin.manifest.token);
+	await setPluginConfig(runtime.env.DB, plugin.manifest.token, normalizedConfig);
+
+	const state = await requirePluginState(runtime.env.DB, plugin.manifest.token);
 	if (state.enabled) {
-		await plugin.onConfigUpdated?.(env, state, parsedConfig, normalizedConfig);
+		await worker.onConfigUpdated?.(toPluginState(state), parsedConfig, normalizedConfig);
 	}
 }
 
-export async function setPluginEnabledById(env: EnvBindings, id: number, enabled: boolean): Promise<void> {
-	const plugin = await getPluginModuleById(id);
-	await setPluginEnabled(env.DB, plugin.manifest.token, enabled);
+export async function setPluginEnabledById(runtime: PluginRuntimeContext, id: number, enabled: boolean): Promise<void> {
+	const plugin = getPluginDefinitionById(id);
+	const worker = await getPluginWorker(plugin, runtime);
+
+	await setPluginEnabled(runtime.env.DB, plugin.manifest.token, enabled);
+
 	const [state, configText] = await Promise.all([
-		requirePluginState(env.DB, plugin.manifest.token),
-		requirePluginConfig(env.DB, plugin),
+		requirePluginState(runtime.env.DB, plugin.manifest.token),
+		requirePluginConfig(runtime.env.DB, plugin),
 	]);
 	const parsedConfig = parseYamlConfig(configText);
+	const pluginState = toPluginState(state);
 
 	if (enabled) {
-		await plugin.onEnable?.(env, state, parsedConfig, configText);
+		await worker.onEnable?.(pluginState, parsedConfig, configText);
 		return;
 	}
 
-	await plugin.onDisable?.(env, state, parsedConfig, configText);
+	await worker.onDisable?.(pluginState, parsedConfig, configText);
 }
 
-export async function runScheduledPlugins(env: EnvBindings, controller: ScheduledController): Promise<void> {
-	const modules = await loadAllPluginModules();
-	for (const plugin of modules) {
-		if (!plugin.onScheduled || !plugin.manifest.cronExpressions?.includes(controller.cron)) {
+export async function runScheduledPlugins(
+	runtime: PluginRuntimeContext,
+	controller: ScheduledController,
+): Promise<void> {
+	for (const plugin of pluginDefinitions) {
+		if (!plugin.manifest.cronExpressions?.includes(controller.cron)) {
 			continue;
 		}
 
 		const [state, configText] = await Promise.all([
-			requirePluginState(env.DB, plugin.manifest.token),
-			requirePluginConfig(env.DB, plugin),
+			requirePluginState(runtime.env.DB, plugin.manifest.token),
+			requirePluginConfig(runtime.env.DB, plugin),
 		]);
-		const parsedConfig = parseYamlConfig(configText);
 		if (!state.enabled) {
 			continue;
 		}
 
-		await plugin.onScheduled(env, state, controller, parsedConfig, configText);
+		const worker = await getPluginWorker(plugin, runtime);
+		if (!worker.onScheduled) {
+			continue;
+		}
+
+		await worker.onScheduled(toPluginState(state), controller, parseYamlConfig(configText), configText);
 	}
 }
 
-async function getPluginModuleById(id: number): Promise<PluginModule> {
-	const plugin = (await loadAllPluginModules()).find((item) => item.manifest.id === id);
+function getPluginDefinitionById(id: number): ConfiguredPluginDefinition {
+	const plugin = pluginDefinitions.find((item) => item.manifest.id === id);
 	if (!plugin) {
 		throw new ApiError(404, "plugin does not exist");
 	}
 	return plugin;
 }
 
-async function loadAllPluginModules(): Promise<PluginModule[]> {
-	pluginModuleCache ??= Promise.all(pluginLoaders.map((loader) => loader.load()));
-	return pluginModuleCache;
+async function getPluginWorker(
+	plugin: ConfiguredPluginDefinition,
+	runtime: PluginRuntimeContext,
+): Promise<PluginWorker> {
+	return createPluginWorker(plugin, runtime);
+}
+
+function createPluginWorker(plugin: ConfiguredPluginDefinition, runtime: PluginRuntimeContext): PluginWorker {
+	const exportsMap = runtime.ctx.exports as Record<string, unknown>;
+	const hostFactory = exportsMap.GotifyHost as
+		| ((options: { props: { pluginToken: string } }) => GotifyHostApi)
+		| undefined;
+	if (!hostFactory) {
+		throw new ApiError(500, "GotifyHost export is unavailable");
+	}
+
+	const stub = runtime.env.PLUGIN_LOADER.get(plugin.manifest.token, () => ({
+		...plugin.workerCode,
+		env: {
+			...plugin.workerCode.env,
+			HOST: hostFactory({ props: { pluginToken: plugin.manifest.token } }),
+		},
+	}));
+
+	return stub.getEntrypoint(plugin.entrypointName) as unknown as PluginWorker;
 }
 
 async function requirePluginState(db: D1Database, token: string): Promise<PluginStateRow> {
@@ -209,7 +234,7 @@ async function requirePluginState(db: D1Database, token: string): Promise<Plugin
 	return state;
 }
 
-async function requirePluginConfig(db: D1Database, plugin: PluginModule): Promise<string> {
+async function requirePluginConfig(db: D1Database, plugin: ConfiguredPluginDefinition): Promise<string> {
 	const config = await getPluginConfigByToken(db, plugin.manifest.token);
 	return config?.config ?? plugin.defaultConfig;
 }
@@ -239,4 +264,21 @@ function toPluginExternal(manifest: PluginManifest, state: PluginStateRow): Plug
 		license: manifest.license,
 		capabilities: [...manifest.capabilities],
 	};
+}
+
+function toPluginState(state: PluginStateRow): PluginState {
+	return {
+		token: state.token,
+		enabled: Boolean(state.enabled),
+		lastCleanupAt: state.last_cleanup_at,
+		lastDeletedCount: state.last_deleted_count,
+		lastError: state.last_error,
+	};
+}
+
+function toApiError(error: unknown, fallbackStatus: number): ApiError {
+	if (error instanceof ApiError) {
+		return error;
+	}
+	return new ApiError(fallbackStatus, error instanceof Error ? error.message : "plugin call failed");
 }

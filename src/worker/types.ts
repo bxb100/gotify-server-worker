@@ -1,6 +1,9 @@
+import type { PluginCapability } from "@gotify/sdk";
+
 export interface EnvBindings {
 	DB: D1Database;
 	STREAM_HUB: DurableObjectNamespace;
+	PLUGIN_LOADER: WorkerLoader;
 	APP_IMAGES?: R2Bucket;
 	GOTIFY_REGISTRATION?: string;
 	GOTIFY_DEFAULT_USER?: string;
@@ -49,8 +52,6 @@ export interface MessageRow {
 	extras: string | null;
 	date: string;
 }
-
-export type PluginCapability = "webhooker" | "displayer" | "configurer" | "messenger" | "storager";
 
 export interface PluginStateRow {
 	token: string;

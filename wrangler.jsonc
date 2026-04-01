@@ -32,6 +32,11 @@
 			"bucket_name": "gotify-worker",
 		},
 	],
+	"worker_loaders": [
+		{
+			"binding": "PLUGIN_LOADER",
+		},
+	],
 	"durable_objects": {
 		"bindings": [
 			{

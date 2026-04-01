@@ -1,4 +1,5 @@
 import bcrypt, { hash } from "bcryptjs";
+import { WorkerEntrypoint } from "cloudflare:workers";
 import { Hono } from "hono";
 
 import { optionalAuth, requireAdmin, requireApplication, requireClient } from "./auth";
@@ -12,6 +13,7 @@ import {
 	deleteClient,
 	deleteMessage,
 	deleteMessagesByApplication,
+	deleteMessagesOlderThan,
 	deleteMessagesByUser,
 	deleteUser,
 	ensureBootstrap,
@@ -19,6 +21,7 @@ import {
 	getApplicationByToken,
 	getApplicationsByUser,
 	getClientById,
+	getClientsLastUsedBefore,
 	getClientsByUser,
 	getMessageById,
 	getMessagesByApplication,
@@ -29,6 +32,7 @@ import {
 	ping,
 	updateApplication,
 	updateClient,
+	updatePluginCleanupState,
 	updateUser,
 } from "./db";
 import {
@@ -564,26 +568,26 @@ app.get("/plugin/:id/config", requireClient, async (c) => {
 
 app.post("/plugin/:id/config", requireClient, async (c) => {
 	const id = parseId(c.req.param("id"));
-	await setPluginConfigById(c.env, id, await c.req.raw.text());
+	await setPluginConfigById({ env: c.env, ctx: c.executionCtx as ExecutionContext }, id, await c.req.raw.text());
 	return new Response(null, { status: 204 });
 });
 
 app.get("/plugin/:id/display", requireClient, async (c) => {
 	const id = parseId(c.req.param("id"));
-	return new Response(await getPluginDisplay(c.env.DB, id), {
+	return new Response(await getPluginDisplay({ env: c.env, ctx: c.executionCtx as ExecutionContext }, id), {
 		headers: { "content-type": "text/markdown; charset=utf-8" },
 	});
 });
 
 app.post("/plugin/:id/enable", requireClient, async (c) => {
 	const id = parseId(c.req.param("id"));
-	await setPluginEnabledById(c.env, id, true);
+	await setPluginEnabledById({ env: c.env, ctx: c.executionCtx as ExecutionContext }, id, true);
 	return new Response(null, { status: 204 });
 });
 
 app.post("/plugin/:id/disable", requireClient, async (c) => {
 	const id = parseId(c.req.param("id"));
-	await setPluginEnabledById(c.env, id, false);
+	await setPluginEnabledById({ env: c.env, ctx: c.executionCtx as ExecutionContext }, id, false);
 	return new Response(null, { status: 204 });
 });
 
@@ -625,15 +629,48 @@ async function publishToUserStream(env: EnvBindings, userId: number, payload: un
 	});
 }
 
+type GotifyHostProps = {
+	pluginToken: string;
+};
+
+export class GotifyHost extends WorkerEntrypoint<EnvBindings, GotifyHostProps> {
+	public async deleteMessagesOlderThan(cutoffIso: string): Promise<number> {
+		return deleteMessagesOlderThan(this.env.DB, cutoffIso);
+	}
+
+	public async getClientsLastUsedBefore(
+		cutoffIso: string,
+	): Promise<Array<{ id: number; name: string; lastUsed: string | null }>> {
+		const clients = await getClientsLastUsedBefore(this.env.DB, cutoffIso);
+		return clients.map((client) => ({
+			id: client.id,
+			name: client.name,
+			lastUsed: client.last_used,
+		}));
+	}
+
+	public async deleteClientById(id: number): Promise<number> {
+		const result = await deleteClient(this.env.DB, id);
+		return Number(result.meta.changes ?? 0);
+	}
+
+	public async updateCleanupState(input: { ranAt: string; deletedCount: number; error: string | null }): Promise<void> {
+		await updatePluginCleanupState(this.env.DB, this.ctx.props.pluginToken, input);
+	}
+}
+
 export { StreamHub };
 
-export default {
-	fetch: app.fetch,
-	async scheduled(controller, env, ctx) {
-		ctx.waitUntil(
-			Promise.all([ensureBootstrap(env), ensurePluginBootstrap(env.DB)]).then(() =>
-				runScheduledPlugins(env, controller),
+export default class GotifyWorker extends WorkerEntrypoint<EnvBindings> {
+	public fetch(request: Request): Response | Promise<Response> {
+		return app.fetch(request, this.env, this.ctx);
+	}
+
+	public scheduled(controller: ScheduledController): void {
+		this.ctx.waitUntil(
+			Promise.all([ensureBootstrap(this.env), ensurePluginBootstrap(this.env.DB)]).then(() =>
+				runScheduledPlugins({ env: this.env, ctx: this.ctx }, controller),
 			),
 		);
-	},
-} satisfies ExportedHandler<EnvBindings>;
+	}
+}

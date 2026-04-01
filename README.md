@@ -16,15 +16,23 @@ The source code and UI are derived from https://github.com/gotify/server. All cr
 ## Drawback
 
 - API change may not affect immediately
-- Only built-in retention plugin support is implemented
 
 ## How to use
 
 1. `npx wrangler d1 create gotify`, remember replace with your own `database_id` in `wrangler.jsonc`
 2. `npx wrangler d1 migrations apply gotify --remote`
 3. `npx wrangler r2 bucket create gotify-worker`
-4. `npm run cf-typegen` (optional)
-5. `npm run build && npm run deploy`
+4. Configure plugins in `vite.config.ts`
+5. `npm run cf-typegen`
+6. `npm run build && npm run deploy`
+
+## Plugins
+
+- Plugin logic now lives under `plugins/`
+- Each plugin is loaded as a Dynamic Worker through the `PLUGIN_LOADER` binding
+- The host exposes plugin-safe capabilities through the `GotifyHost` `WorkerEntrypoint`
+- Add or remove plugins by editing `vite.config.ts`
+- After changing plugin bindings or worker exports, rerun `npm run cf-typegen`
 
 ## Client
 

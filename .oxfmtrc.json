@@ -1,5 +1,5 @@
 {
 	"useTabs": true,
 	"experimentalSortImports": {},
-	"ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/*.mdx", "**/package.json"]
+	"ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/*.mdx", "**/package.json", "worker-configuration.d.ts"]
 }
