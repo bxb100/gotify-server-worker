@@ -1,4 +1,5 @@
 import bcrypt, { hash } from "bcryptjs";
+import { WorkerEntrypoint } from "cloudflare:workers";
 import { Hono } from "hono";
 
 import { optionalAuth, requireAdmin, requireApplication, requireClient } from "./auth";
@@ -564,26 +565,26 @@ app.get("/plugin/:id/config", requireClient, async (c) => {
 
 app.post("/plugin/:id/config", requireClient, async (c) => {
 	const id = parseId(c.req.param("id"));
-	await setPluginConfigById(c.env, id, await c.req.raw.text());
+	await setPluginConfigById({ env: c.env }, id, await c.req.raw.text());
 	return new Response(null, { status: 204 });
 });
 
 app.get("/plugin/:id/display", requireClient, async (c) => {
 	const id = parseId(c.req.param("id"));
-	return new Response(await getPluginDisplay(c.env.DB, id), {
+	return new Response(await getPluginDisplay({ env: c.env }, id), {
 		headers: { "content-type": "text/markdown; charset=utf-8" },
 	});
 });
 
 app.post("/plugin/:id/enable", requireClient, async (c) => {
 	const id = parseId(c.req.param("id"));
-	await setPluginEnabledById(c.env, id, true);
+	await setPluginEnabledById({ env: c.env }, id, true);
 	return new Response(null, { status: 204 });
 });
 
 app.post("/plugin/:id/disable", requireClient, async (c) => {
 	const id = parseId(c.req.param("id"));
-	await setPluginEnabledById(c.env, id, false);
+	await setPluginEnabledById({ env: c.env }, id, false);
 	return new Response(null, { status: 204 });
 });
 
@@ -627,13 +628,16 @@ async function publishToUserStream(env: EnvBindings, userId: number, payload: un
 
 export { StreamHub };
 
-export default {
-	fetch: app.fetch,
-	async scheduled(controller, env, ctx) {
-		ctx.waitUntil(
-			Promise.all([ensureBootstrap(env), ensurePluginBootstrap(env.DB)]).then(() =>
-				runScheduledPlugins(env, controller),
+export default class GotifyWorker extends WorkerEntrypoint<EnvBindings> {
+	public fetch(request: Request): Response | Promise<Response> {
+		return app.fetch(request, this.env, this.ctx);
+	}
+
+	public scheduled(controller: ScheduledController): void {
+		this.ctx.waitUntil(
+			Promise.all([ensureBootstrap(this.env), ensurePluginBootstrap(this.env.DB)]).then(() =>
+				runScheduledPlugins({ env: this.env }, controller),
 			),
 		);
-	},
-} satisfies ExportedHandler<EnvBindings>;
+	}
+}

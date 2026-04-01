@@ -20,5 +20,5 @@
 		"noFallthroughCasesInSwitch": true,
 		"noUncheckedSideEffectImports": true
 	},
-	"include": ["vite.config.ts"]
+	"include": ["plugins", "types/**/*.d.ts", "vite.config.ts"]
 }
