@@ -1,0 +1,11 @@
+{
+	"name": "@gotify/message-auto-delete",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"@gotify/sdk": "workspace:*"
+	},
+	"exports": {
+		".": "./src/index.ts"
+	}
+}

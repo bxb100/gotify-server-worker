@@ -16,7 +16,6 @@ The source code and UI are derived from https://github.com/gotify/server. All cr
 ## Drawback
 
 - API change may not affect immediately
-- Only built-in retention plugin support is implemented
 
 ## How to use
 
@@ -25,6 +24,12 @@ The source code and UI are derived from https://github.com/gotify/server. All cr
 3. `npx wrangler r2 bucket create gotify-worker`
 4. `npm run cf-typegen` (optional)
 5. `npm run build && npm run deploy`
+
+## Plugins
+
+- Plugin logic now lives under `plugins/`
+- Each plugin is a standalone workspace package that extends `GotifyPlugin`
+- Add/Remove plugin dependency will auto trigger re-generation of `src/worker/gen/load.plugin.ts`
 
 ## Client
 
