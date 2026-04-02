@@ -1,4 +1,6 @@
 import { cloudflare } from '@cloudflare/vite-plugin'
+import clientTokenCleanupPlugin from '@gotify/client-token-cleanup'
+import messageAutoDeletePlugin from '@gotify/message-auto-delete'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -6,7 +8,7 @@ import generateLoadPlugin from './scripts/generate-load-plugin'
 
 export default defineConfig({
   plugins: [
-    generateLoadPlugin(),
+    generateLoadPlugin([clientTokenCleanupPlugin, messageAutoDeletePlugin]),
     react({
       babel: {
         plugins: [

@@ -32,8 +32,11 @@ credit goes to them.
 
 - Plugin logic now lives under `plugins/`
 - Each plugin is a standalone workspace package that extends `GotifyPlugin`
-- Add/Remove plugin dependency will auto trigger re-generation of
-  `src/worker/gen/load.plugin.ts`
+- Add plugin package dependencies in `package.json`
+- Import enabled plugins in `vite.config.ts` and pass them to
+  `generateLoadPlugin({ plugins: [...] })`
+- `src/worker/gen/load.plugin.ts` is generated from the configured plugin list
+  by matching against package dependencies
 
 ## Client
 

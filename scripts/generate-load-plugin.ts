@@ -77,13 +77,30 @@ async function readDependencyNames(
   return [...names]
 }
 
-async function resolvePluginInputs(
-  dependencyNames: string[],
+function getPluginKey(plugin: PluginDefinition): string {
+  return plugin.manifest.token
+}
+
+async function resolveConfiguredPluginInputs(
+  plugins: readonly PluginDefinition[],
+  packageJsonPath: string,
+  dependencyFields: GenerateLoadPluginOptions['dependencyFields'],
   resolve: (id: string) => Promise<string | null>
 ): Promise<PluginInput[]> {
-  const pluginInputs: PluginInput[] = []
+  const dependencyNames = await readDependencyNames(
+    packageJsonPath,
+    dependencyFields
+  )
+  const remainingPlugins = new Map(
+    plugins.map((plugin) => [getPluginKey(plugin), plugin])
+  )
+  const resolvedPluginInputs = new Map<string, PluginInput>()
 
   for (const source of dependencyNames) {
+    if (remainingPlugins.size === 0) {
+      break
+    }
+
     let resolvedId: string | null = null
     try {
       resolvedId = await resolve(source)
@@ -96,26 +113,55 @@ async function resolvePluginInputs(
 
     try {
       const imported = await import(pathToFileURL(resolvedId).href)
-      if (isPluginDefinition(imported.default)) {
-        pluginInputs.push({ source, resolvedId })
+      if (!isPluginDefinition(imported.default)) {
+        continue
       }
+
+      const pluginKey = getPluginKey(imported.default)
+      if (
+        !remainingPlugins.has(pluginKey) ||
+        resolvedPluginInputs.has(pluginKey)
+      ) {
+        continue
+      }
+
+      resolvedPluginInputs.set(pluginKey, { source, resolvedId })
+      remainingPlugins.delete(pluginKey)
     } catch {}
   }
 
-  return pluginInputs
+  if (remainingPlugins.size > 0) {
+    const unresolved = [...remainingPlugins.values()]
+      .map((plugin) => `${plugin.manifest.name} (${plugin.manifest.token})`)
+      .join(', ')
+    throw new Error(
+      `Failed to resolve configured plugins from ${packageJsonPath}: ${unresolved}`
+    )
+  }
+
+  return plugins.map((plugin) => {
+    const pluginInput = resolvedPluginInputs.get(getPluginKey(plugin))
+    if (!pluginInput) {
+      throw new Error(
+        `Missing resolved plugin input for ${plugin.manifest.name} (${plugin.manifest.token})`
+      )
+    }
+    return pluginInput
+  })
 }
 
 export default function generateLoadPlugin(
+  plugins: readonly PluginDefinition[],
   options: GenerateLoadPluginOptions = {}
 ): Plugin {
   const output = options.output ?? 'src/worker/gen/load.plugin.ts'
   const packageJson = options.packageJson ?? 'package.json'
   let root = process.cwd()
   let packageJsonPath = path.resolve(root, packageJson)
-  let pluginInputs: PluginInput[] = []
-  let watchedFiles: string[] = []
 
-  async function writeGeneratedFile(): Promise<void> {
+  async function writeGeneratedFile(
+    pluginInputs: PluginInput[]
+  ): Promise<void> {
     const outputPath = path.resolve(root, output)
     const source = buildSource(pluginInputs)
 
@@ -133,15 +179,16 @@ export default function generateLoadPlugin(
     await writeFile(outputPath, source)
   }
 
-  async function discoverPluginInputs(
+  async function generate(
     resolve: (id: string) => Promise<string | null>
   ): Promise<void> {
-    const dependencyNames = await readDependencyNames(
+    const pluginInputs = await resolveConfiguredPluginInputs(
+      plugins,
       packageJsonPath,
-      options.dependencyFields
+      options.dependencyFields,
+      resolve
     )
-    pluginInputs = await resolvePluginInputs(dependencyNames, resolve)
-    watchedFiles = pluginInputs.map((input) => input.resolvedId)
+    await writeGeneratedFile(pluginInputs)
   }
 
   return {
@@ -152,25 +199,12 @@ export default function generateLoadPlugin(
       packageJsonPath = path.resolve(root, packageJson)
     },
     async buildStart() {
-      await discoverPluginInputs(
-        async (id) => (await this.resolve(id))?.id ?? null
-      )
-      for (const file of watchedFiles) {
-        this.addWatchFile(file)
-      }
-      await writeGeneratedFile()
+      await generate(async (id) => (await this.resolve(id))?.id ?? null)
     },
     async configureServer(server) {
-      await discoverPluginInputs(
+      await generate(
         async (id) => (await server.pluginContainer.resolveId(id))?.id ?? null
       )
-      server.watcher.add(watchedFiles)
-      await writeGeneratedFile()
-    },
-    async handleHotUpdate(ctx) {
-      if (watchedFiles.includes(ctx.file)) {
-        await writeGeneratedFile()
-      }
     }
   }
 }
