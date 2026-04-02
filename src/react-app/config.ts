@@ -1,28 +1,31 @@
-import { IVersion } from "./types";
+import { IVersion } from './types'
 
 export interface IConfig {
-	url: string;
-	register: boolean;
-	version: IVersion;
+  url: string
+  register: boolean
+  version: IVersion
 }
 
 declare global {
-	interface Window {
-		config?: Partial<IConfig>;
-	}
+  interface Window {
+    config?: Partial<IConfig>
+  }
 }
 
 const config: IConfig = {
-	url: "unset",
-	register: false,
-	version: { commit: "unknown", buildDate: "unknown", version: "unknown" },
-	...window.config,
-};
+  url: 'unset',
+  register: false,
+  version: { commit: 'unknown', buildDate: 'unknown', version: 'unknown' },
+  ...window.config
+}
 
-export function set<Key extends keyof IConfig>(key: Key, value: IConfig[Key]): void {
-	config[key] = value;
+export function set<Key extends keyof IConfig>(
+  key: Key,
+  value: IConfig[Key]
+): void {
+  config[key] = value
 }
 
 export function get<K extends keyof IConfig>(key: K): IConfig[K] {
-	return config[key];
+  return config[key]
 }

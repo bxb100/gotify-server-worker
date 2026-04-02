@@ -1,12 +1,26 @@
 {
-	"useTabs": true,
-	"experimentalSortImports": {},
-	"ignorePatterns": [
-		"**/dist/**",
-		"**/node_modules/**",
-		"**/*.mdx",
-		"**/package.json",
-		"worker-configuration.d.ts",
-		"**/gen/**"
-	]
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": false,
+  "singleQuote": true,
+  "quoteProps": "as-needed",
+  "jsxSingleQuote": false,
+  "trailingComma": "none",
+  "bracketSpacing": true,
+  "bracketSameLine": true,
+  "arrowParens": "always",
+  "proseWrap": "always",
+  "htmlWhitespaceSensitivity": "css",
+  "endOfLine": "lf",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    ".DS_Store",
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/package.json",
+    "worker-configuration.d.ts",
+    "**/gen/**"
+  ]
 }

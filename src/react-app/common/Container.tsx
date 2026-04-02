@@ -1,24 +1,27 @@
-import Paper from "@mui/material/Paper";
-import * as React from "react";
-import { makeStyles } from "tss-react/mui";
+import Paper from '@mui/material/Paper'
+import * as React from 'react'
+import { makeStyles } from 'tss-react/mui'
 
 const useStyles = makeStyles()(() => ({
-	paper: {
-		padding: 16,
-	},
-}));
+  paper: {
+    padding: 16
+  }
+}))
 
 interface IProps {
-	style?: React.CSSProperties;
+  style?: React.CSSProperties
 }
 
-const Container: React.FC<React.PropsWithChildren<IProps>> = ({ children, style }) => {
-	const { classes } = useStyles();
-	return (
-		<Paper elevation={6} className={classes.paper} style={style}>
-			{children}
-		</Paper>
-	);
-};
+const Container: React.FC<React.PropsWithChildren<IProps>> = ({
+  children,
+  style
+}) => {
+  const { classes } = useStyles()
+  return (
+    <Paper elevation={6} className={classes.paper} style={style}>
+      {children}
+    </Paper>
+  )
+}
 
-export default Container;
+export default Container

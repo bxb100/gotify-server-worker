@@ -1,3 +1,3 @@
-declare module "js-yaml" {
-	export function load(input: string): unknown;
+declare module 'js-yaml' {
+  export function load(input: string): unknown
 }

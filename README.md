@@ -9,9 +9,11 @@
 ## Introduction
 
 > [!WARNING]  
-> Vibe coding with Codex, Gemini, and Copilot. This repository has not been fully reviewed.
+> Vibe coding with Codex, Gemini, and Copilot. This repository has not been
+> fully reviewed.
 
-The source code and UI are derived from https://github.com/gotify/server. All credit goes to them.
+The source code and UI are derived from https://github.com/gotify/server. All
+credit goes to them.
 
 ## Drawback
 
@@ -19,7 +21,8 @@ The source code and UI are derived from https://github.com/gotify/server. All cr
 
 ## How to use
 
-1. `npx wrangler d1 create gotify`, remember replace with your own `database_id` in `wrangler.jsonc`
+1. `npx wrangler d1 create gotify`, remember replace with your own `database_id`
+   in `wrangler.jsonc`
 2. `npx wrangler d1 migrations apply gotify --remote`
 3. `npx wrangler r2 bucket create gotify-worker`
 4. `npm run cf-typegen` (optional)
@@ -29,7 +32,8 @@ The source code and UI are derived from https://github.com/gotify/server. All cr
 
 - Plugin logic now lives under `plugins/`
 - Each plugin is a standalone workspace package that extends `GotifyPlugin`
-- Add/Remove plugin dependency will auto trigger re-generation of `src/worker/gen/load.plugin.ts`
+- Add/Remove plugin dependency will auto trigger re-generation of
+  `src/worker/gen/load.plugin.ts`
 
 ## Client
 

@@ -1,215 +1,253 @@
-import { action, IObservableArray, observable, reaction, runInAction } from "mobx";
-import { createTransformer } from "mobx-utils";
-import { closeSnackbar, SnackbarKey } from "notistack";
+import {
+  action,
+  IObservableArray,
+  observable,
+  reaction,
+  runInAction
+} from 'mobx'
+import { createTransformer } from 'mobx-utils'
+import { closeSnackbar, SnackbarKey } from 'notistack'
 
-import { requestJson, requestVoid } from "../api";
-import { BaseStore } from "../common/BaseStore";
-import * as config from "../config";
-import { SnackReporter } from "../snack/SnackManager";
-import { IApplication, IMessage, IPagedMessages } from "../types";
+import { requestJson, requestVoid } from '../api'
+import { BaseStore } from '../common/BaseStore'
+import * as config from '../config'
+import { SnackReporter } from '../snack/SnackManager'
+import { IApplication, IMessage, IPagedMessages } from '../types'
 
-const AllMessages = -1;
+const AllMessages = -1
 
 interface MessagesState {
-	messages: IObservableArray<IMessage>;
-	hasMore: boolean;
-	nextSince: number;
-	loaded: boolean;
+  messages: IObservableArray<IMessage>
+  hasMore: boolean
+  nextSince: number
+  loaded: boolean
 }
 
 interface PendingDelete {
-	key: SnackbarKey;
-	message: IMessage;
+  key: SnackbarKey
+  message: IMessage
 }
 
 export class MessagesStore {
-	@observable private accessor state: Record<string, MessagesState> = {};
-	@observable private accessor pendingDeletes: Map<number, PendingDelete> = observable.map();
+  @observable private accessor state: Record<string, MessagesState> = {}
+  @observable private accessor pendingDeletes: Map<number, PendingDelete> =
+    observable.map()
 
-	private loading = false;
+  private loading = false
 
-	public constructor(
-		private readonly appStore: BaseStore<IApplication>,
-		private readonly snack: SnackReporter,
-	) {
-		reaction(() => appStore.getItems(), this.createEmptyStatesForApps);
-	}
+  public constructor(
+    private readonly appStore: BaseStore<IApplication>,
+    private readonly snack: SnackReporter
+  ) {
+    reaction(() => appStore.getItems(), this.createEmptyStatesForApps)
+  }
 
-	private stateOf = (appId: number, create = true) => {
-		if (!this.state[appId] && create) {
-			this.state[appId] = this.emptyState();
-		}
-		return this.state[appId] || this.emptyState();
-	};
+  private stateOf = (appId: number, create = true) => {
+    if (!this.state[appId] && create) {
+      this.state[appId] = this.emptyState()
+    }
+    return this.state[appId] || this.emptyState()
+  }
 
-	public loaded = (appId: number) => this.stateOf(appId, /*create*/ false).loaded;
+  public loaded = (appId: number) =>
+    this.stateOf(appId, /*create*/ false).loaded
 
-	public canLoadMore = (appId: number) => this.stateOf(appId, /*create*/ false).hasMore;
+  public canLoadMore = (appId: number) =>
+    this.stateOf(appId, /*create*/ false).hasMore
 
-	@action
-	public loadMore = async (appId: number) => {
-		const state = this.stateOf(appId);
-		if (!state.hasMore || this.loading) {
-			return Promise.resolve();
-		}
-		this.loading = true;
+  @action
+  public loadMore = async (appId: number) => {
+    const state = this.stateOf(appId)
+    if (!state.hasMore || this.loading) {
+      return Promise.resolve()
+    }
+    this.loading = true
 
-		try {
-			const pagedResult = await this.fetchMessages(appId, state.nextSince);
-			runInAction(() => {
-				state.messages.replace([...state.messages, ...pagedResult.messages]);
-				state.nextSince = pagedResult.paging.since ?? 0;
-				state.hasMore = "next" in pagedResult.paging;
-				state.loaded = true;
-			});
-		} finally {
-			this.loading = false;
-		}
+    try {
+      const pagedResult = await this.fetchMessages(appId, state.nextSince)
+      runInAction(() => {
+        state.messages.replace([...state.messages, ...pagedResult.messages])
+        state.nextSince = pagedResult.paging.since ?? 0
+        state.hasMore = 'next' in pagedResult.paging
+        state.loaded = true
+      })
+    } finally {
+      this.loading = false
+    }
 
-		return Promise.resolve();
-	};
+    return Promise.resolve()
+  }
 
-	@action
-	public publishSingleMessage = (message: IMessage) => {
-		if (this.exists(AllMessages)) {
-			this.stateOf(AllMessages).messages.unshift(message);
-		}
-		if (this.exists(message.appid)) {
-			this.stateOf(message.appid).messages.unshift(message);
-		}
-	};
+  @action
+  public publishSingleMessage = (message: IMessage) => {
+    if (this.exists(AllMessages)) {
+      this.stateOf(AllMessages).messages.unshift(message)
+    }
+    if (this.exists(message.appid)) {
+      this.stateOf(message.appid).messages.unshift(message)
+    }
+  }
 
-	@action
-	public removeByApp = async (appId: number) => {
-		if (appId === AllMessages) {
-			await requestVoid(config.get("url") + "message", { method: "DELETE" });
-			this.snack("Deleted all messages");
-			this.clearAll();
-		} else {
-			await requestVoid(config.get("url") + "application/" + appId + "/message", {
-				method: "DELETE",
-			});
-			this.snack(`Deleted all messages from ${this.appStore.getByID(appId).name}`);
-			this.clear(AllMessages);
-			this.clear(appId);
-		}
-		await this.loadMore(appId);
-	};
+  @action
+  public removeByApp = async (appId: number) => {
+    if (appId === AllMessages) {
+      await requestVoid(config.get('url') + 'message', { method: 'DELETE' })
+      this.snack('Deleted all messages')
+      this.clearAll()
+    } else {
+      await requestVoid(
+        config.get('url') + 'application/' + appId + '/message',
+        {
+          method: 'DELETE'
+        }
+      )
+      this.snack(
+        `Deleted all messages from ${this.appStore.getByID(appId).name}`
+      )
+      this.clear(AllMessages)
+      this.clear(appId)
+    }
+    await this.loadMore(appId)
+  }
 
-	@action
-	public addPendingDelete = (pending: PendingDelete) => this.pendingDeletes.set(pending.message.id, pending);
+  @action
+  public addPendingDelete = (pending: PendingDelete) =>
+    this.pendingDeletes.set(pending.message.id, pending)
 
-	@action
-	public cancelPendingDelete = (message: IMessage): boolean => {
-		const pending = this.pendingDeletes.get(message.id);
-		if (pending) {
-			this.pendingDeletes.delete(message.id);
-			closeSnackbar(pending.key);
-		}
-		return !!pending;
-	};
+  @action
+  public cancelPendingDelete = (message: IMessage): boolean => {
+    const pending = this.pendingDeletes.get(message.id)
+    if (pending) {
+      this.pendingDeletes.delete(message.id)
+      closeSnackbar(pending.key)
+    }
+    return !!pending
+  }
 
-	@action
-	public executePendingDeletes = () =>
-		Array.from(this.pendingDeletes.values()).forEach(({ message }) => this.removeSingle(message));
+  @action
+  public executePendingDeletes = () =>
+    Array.from(this.pendingDeletes.values()).forEach(({ message }) =>
+      this.removeSingle(message)
+    )
 
-	public visible = (message: number): boolean => !this.pendingDeletes.has(message);
+  public visible = (message: number): boolean =>
+    !this.pendingDeletes.has(message)
 
-	@action
-	public removeSingle = async (message: IMessage) => {
-		if (!this.pendingDeletes.has(message.id)) {
-			return;
-		}
+  @action
+  public removeSingle = async (message: IMessage) => {
+    if (!this.pendingDeletes.has(message.id)) {
+      return
+    }
 
-		await requestVoid(config.get("url") + "message/" + message.id, {
-			method: "DELETE",
-			keepalive: true,
-		});
-		if (this.exists(AllMessages)) {
-			this.removeFromList(this.state[AllMessages].messages, message);
-		}
-		if (this.exists(message.appid)) {
-			this.removeFromList(this.state[message.appid].messages, message);
-		}
-		this.cancelPendingDelete(message);
-	};
+    await requestVoid(config.get('url') + 'message/' + message.id, {
+      method: 'DELETE',
+      keepalive: true
+    })
+    if (this.exists(AllMessages)) {
+      this.removeFromList(this.state[AllMessages].messages, message)
+    }
+    if (this.exists(message.appid)) {
+      this.removeFromList(this.state[message.appid].messages, message)
+    }
+    this.cancelPendingDelete(message)
+  }
 
-	public sendMessage = async (appId: number, message: string, title: string, priority: number): Promise<void> => {
-		const app = this.appStore.getByID(appId);
-		const payload: Pick<IMessage, "title" | "message" | "priority"> = {
-			message,
-			priority,
-			title,
-		};
+  public sendMessage = async (
+    appId: number,
+    message: string,
+    title: string,
+    priority: number
+  ): Promise<void> => {
+    const app = this.appStore.getByID(appId)
+    const payload: Pick<IMessage, 'title' | 'message' | 'priority'> = {
+      message,
+      priority,
+      title
+    }
 
-		await requestVoid(`${config.get("url")}message`, {
-			method: "POST",
-			body: payload,
-			headers: { "X-Gotify-Key": app.token },
-		});
-		this.snack(`Message sent to ${app.name}`);
-	};
+    await requestVoid(`${config.get('url')}message`, {
+      method: 'POST',
+      body: payload,
+      headers: { 'X-Gotify-Key': app.token }
+    })
+    this.snack(`Message sent to ${app.name}`)
+  }
 
-	@action
-	public clearAll = () => {
-		this.state = {};
-		this.createEmptyStatesForApps(this.appStore.getItems());
-	};
+  @action
+  public clearAll = () => {
+    this.state = {}
+    this.createEmptyStatesForApps(this.appStore.getItems())
+  }
 
-	@action
-	public refreshByApp = async (appId: number) => {
-		this.clearAll();
-		this.loadMore(appId);
-	};
+  @action
+  public refreshByApp = async (appId: number) => {
+    this.clearAll()
+    this.loadMore(appId)
+  }
 
-	public exists = (id: number) => this.stateOf(id).loaded;
+  public exists = (id: number) => this.stateOf(id).loaded
 
-	@action
-	private removeFromList(messages: IMessage[], messageToDelete: IMessage): false | number {
-		if (messages) {
-			const index = messages.findIndex((message) => message.id === messageToDelete.id);
-			if (index !== -1) {
-				messages.splice(index, 1);
-				return index;
-			}
-		}
-		return false;
-	}
+  @action
+  private removeFromList(
+    messages: IMessage[],
+    messageToDelete: IMessage
+  ): false | number {
+    if (messages) {
+      const index = messages.findIndex(
+        (message) => message.id === messageToDelete.id
+      )
+      if (index !== -1) {
+        messages.splice(index, 1)
+        return index
+      }
+    }
+    return false
+  }
 
-	@action
-	private clear = (appId: number) => (this.state[appId] = this.emptyState());
+  @action
+  private clear = (appId: number) => (this.state[appId] = this.emptyState())
 
-	private fetchMessages = (appId: number, since: number): Promise<IPagedMessages> => {
-		if (appId === AllMessages) {
-			return requestJson(config.get("url") + "message?since=" + since);
-		} else {
-			return requestJson(config.get("url") + "application/" + appId + "/message?since=" + since);
-		}
-	};
+  private fetchMessages = (
+    appId: number,
+    since: number
+  ): Promise<IPagedMessages> => {
+    if (appId === AllMessages) {
+      return requestJson(config.get('url') + 'message?since=' + since)
+    } else {
+      return requestJson(
+        config.get('url') + 'application/' + appId + '/message?since=' + since
+      )
+    }
+  }
 
-	private getUnCached = (appId: number): Array<IMessage> => {
-		const appToImage: Partial<Record<string, string>> = this.appStore
-			.getItems()
-			.reduce((all, app) => ({ ...all, [app.id]: app.image }), {});
+  private getUnCached = (appId: number): Array<IMessage> => {
+    const appToImage: Partial<Record<string, string>> = this.appStore
+      .getItems()
+      .reduce((all, app) => ({ ...all, [app.id]: app.image }), {})
 
-		return this.stateOf(appId, false)
-			.messages.filter((message) => !this.pendingDeletes.has(message.id))
-			.map((message: IMessage): IMessage => ({ ...message, image: appToImage[message.appid] }));
-	};
+    return this.stateOf(appId, false)
+      .messages.filter((message) => !this.pendingDeletes.has(message.id))
+      .map(
+        (message: IMessage): IMessage => ({
+          ...message,
+          image: appToImage[message.appid]
+        })
+      )
+  }
 
-	public get = createTransformer(this.getUnCached);
+  public get = createTransformer(this.getUnCached)
 
-	private clearCache = () => (this.get = createTransformer(this.getUnCached));
+  private clearCache = () => (this.get = createTransformer(this.getUnCached))
 
-	private createEmptyStatesForApps = (apps: IApplication[]) => {
-		apps.map((app) => app.id).forEach((id) => this.stateOf(id, /*create*/ true));
-		this.clearCache();
-	};
+  private createEmptyStatesForApps = (apps: IApplication[]) => {
+    apps.map((app) => app.id).forEach((id) => this.stateOf(id, /*create*/ true))
+    this.clearCache()
+  }
 
-	private emptyState = (): MessagesState => ({
-		messages: observable.array(),
-		hasMore: true,
-		nextSince: 0,
-		loaded: false,
-	});
+  private emptyState = (): MessagesState => ({
+    messages: observable.array(),
+    hasMore: true,
+    nextSince: 0,
+    loaded: false
+  })
 }
