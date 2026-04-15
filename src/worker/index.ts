@@ -115,11 +115,9 @@ app.onError((error) => {
   if (error instanceof ApiError) {
     return jsonError(error.status, error.message)
   }
-  console.error(error)
-  return jsonError(
-    500,
-    error instanceof Error ? error.message : 'internal server error'
-  )
+  // 🛡️ Sentinel: Do not leak internal error messages to the client
+  console.error('Unhandled error:', error)
+  return jsonError(500, 'internal server error')
 })
 
 app.get('/health', async (c) => {
