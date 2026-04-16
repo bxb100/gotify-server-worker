@@ -596,37 +596,38 @@ app.get('/stream', requireClient, async (c) => {
   return stub.fetch(c.req.raw)
 })
 
-app.get('/plugin', requireClient, async (c) =>
+app.get('/plugin', requireAdmin, async (c) =>
   c.json(await listPlugins(c.env.DB))
 )
 
-app.get('/plugin/:id/config', requireClient, async (c) => {
+app.get('/plugin/:id/config', requireAdmin, async (c) => {
   const id = parseId(c.req.param('id'))
   return new Response(await getPluginConfig(c.env.DB, id), {
     headers: { 'content-type': 'application/x-yaml; charset=utf-8' }
   })
 })
 
-app.post('/plugin/:id/config', requireClient, async (c) => {
+// SECURITY: Only admins should be able to change plugin configuration to prevent unauthorized modifications
+app.post('/plugin/:id/config', requireAdmin, async (c) => {
   const id = parseId(c.req.param('id'))
   await setPluginConfigById({ env: c.env }, id, await c.req.raw.text())
   return new Response(null, { status: 204 })
 })
 
-app.get('/plugin/:id/display', requireClient, async (c) => {
+app.get('/plugin/:id/display', requireAdmin, async (c) => {
   const id = parseId(c.req.param('id'))
   return new Response(await getPluginDisplay({ env: c.env }, id), {
     headers: { 'content-type': 'text/markdown; charset=utf-8' }
   })
 })
 
-app.post('/plugin/:id/enable', requireClient, async (c) => {
+app.post('/plugin/:id/enable', requireAdmin, async (c) => {
   const id = parseId(c.req.param('id'))
   await setPluginEnabledById({ env: c.env }, id, true)
   return new Response(null, { status: 204 })
 })
 
-app.post('/plugin/:id/disable', requireClient, async (c) => {
+app.post('/plugin/:id/disable', requireAdmin, async (c) => {
   const id = parseId(c.req.param('id'))
   await setPluginEnabledById({ env: c.env }, id, false)
   return new Response(null, { status: 204 })
