@@ -445,9 +445,11 @@ app.post('/application/:id/image', requireClient, async (c) => {
   }
 
   const imageName = generateImageName(extension)
+  // SECURITY WARNING: Do not use client-provided uploaded.type to avoid MIME-type spoofing
+  // Attackers could upload an image with a text/html content-type resulting in Stored XSS
   await c.env.APP_IMAGES.put(imageName, bytes, {
     httpMetadata: {
-      contentType: uploaded.type || contentTypeFromExtension(extension)
+      contentType: contentTypeFromExtension(extension)
     }
   })
 
