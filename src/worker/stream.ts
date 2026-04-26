@@ -22,6 +22,7 @@ export class StreamHub extends DurableObject<EnvBindings> {
       const [client, server] = Object.values(pair)
 
       this.ctx.acceptWebSocket(server)
+      this.sockets.add(server)
 
       return new Response(null, {
         status: 101,
